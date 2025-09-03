@@ -71,6 +71,7 @@ def lambda_handler(event, context):
     s3_event = event['Records'][0]['s3']
     bucket = s3_event['bucket']['name']
     original_key = urllib.parse.unquote_plus(s3_event['object']['key'], encoding='utf-8')
+    nome_arquivo = original_key.split('/')[-1]
 
     print(f'Processando arquivo: s3://{bucket}/{original_key}')
     try:
@@ -93,5 +94,14 @@ def lambda_handler(event, context):
 
         print('--- JSON Final ---\n' + json.dumps(dados_finais, indent=2))
 
+        forma_pgto = dados_finais.get('forma_pgto', 'outros').lower() # Pega a forma de pagamento
+        nova_chave = f'processados/{forma_pgto}/{nome_arquivo}' # Define a pasta de destino
+
     except Exception as e:
         print(f'❌ Erro no processamento do arquivo {original_key}: {e}')
+        nova_chave = f'falhas/{nome_arquivo}' # Define a pasta de destino de falha
+
+    # Move o arquivo para o destino final (deu bom ou deu ruim)
+    s3.copy_object(Bucket=bucket, CopySource={'Bucket': bucket, 'Key': original_key}, Key=nova_chave)
+    s3.delete_object(Bucket=bucket, Key=original_key)
+    print(f'✅ Arquivo movido para: s3://{bucket}/{nova_chave}')
