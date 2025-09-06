@@ -77,6 +77,9 @@ def analisar_com_gemini(texto_extraido: str) -> dict: # chama a API do Gemini
             
             print("--- Resposta da LLM ---")
             print(json_response_text)
+
+            # faz com que JSON seja válido, substituindo o 'None' por 'null'
+            json_response_text = json_response_text.replace('None', 'null')
             
             # Converte a string de resposta em um dicionário
             return json.loads(json_response_text)
