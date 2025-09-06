@@ -21,7 +21,7 @@ def analisar_com_gemini(texto_extraido: str) -> dict: # chama a API do Gemini
     3.  Formato Data: A "data_emissao" deve ser "DD/MM/AAAA".
     4.  Formato Valor: O "valor_total" deve ser uma string com ponto como separador decimal (ex: "123.45").
     5.  Forma de Pagamento: O campo "forma_pgto" deve ser apenas uma das seguintes opções: "dinheiro", "pix", "cartao", ou "outros".
-    6.  Valores Não Encontrados: Se um campo não for encontrado no texto, o valor correspondente no JSON deve ser o valor `null`.
+    6.  Valores Não Encontrados: Se um campo não for encontrado no texto, o valor correspondente no JSON deve ser o valor `None`.
     7.  Formato da Resposta: A sua resposta deve ser APENAS o objeto JSON. Não inclua ```json no início ou fim, nem qualquer outro texto ou explicação.
 
     -> EXEMPLOS DE TREINAMENTO
@@ -49,11 +49,11 @@ def analisar_com_gemini(texto_extraido: str) -> dict: # chama a API do Gemini
     {{
         "nome_emissor": "Mercadinho da Cajuína",
         "CNPJ_emissor": "98.765.432/0001-11",
-        "endereco_emissor": null,
-        "CNPJ_CPF_consumidor": null,
+        "endereco_emissor": None,
+        "CNPJ_CPF_consumidor": None,
         "data_emissao": "02/02/2025",
-        "numero_nota_fiscal": null,
-        "serie_nota_fiscal": null,
+        "numero_nota_fiscal": None,
+        "serie_nota_fiscal": None,
         "valor_total": "30.00",
         "forma_pgto": "dinheiro"
     }}
