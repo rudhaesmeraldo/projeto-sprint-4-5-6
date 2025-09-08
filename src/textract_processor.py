@@ -1,5 +1,4 @@
 import boto3
-import json
 
 textract = boto3.client("textract")
 
@@ -11,4 +10,4 @@ def extract_text(bucket: str, key: str) -> str:
     )
 
     print("✅ Extração concluída com sucesso.")
-    return json.dumps(resp, ensure_ascii=False, indent=2)
+    return resp
