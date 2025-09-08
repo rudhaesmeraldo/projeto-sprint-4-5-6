@@ -2,7 +2,7 @@ import boto3
 
 textract = boto3.client("textract")
 
-def extract_expense_text(bucket: str, key: str) -> str:
+def processar_com_textract(bucket: str, key: str) -> str:
     print(f"📄 Rodando Textract no arquivo: s3://{bucket}/{key}")
 
     try:
@@ -13,14 +13,15 @@ def extract_expense_text(bucket: str, key: str) -> str:
         texto_encontrado = []
 
         for doc in resp.get("ExpenseDocuments", []):
-            for field in doc.get("Fields", []):
-                field_type = field.get("Type", {}).get("Text")
-                value_detection = field.get("ValueDetection")
-                field_value = value_detection.get("Text") if value_detection else None
-
-                if field_type or field_value:
-                    texto_encontrado.append(f"{field_type}: {field_value}")
-
+            for field in doc.get("SummaryFields", []):
+                label = field.get("LabelDetection", {}).get("Text", "")
+                value = field.get("ValueDetection", {}).get("Text", "")
+                
+                if label:
+                    texto_encontrado.append(label)
+                if value:
+                    texto_encontrado.append(value)
+        
         texto_completo = "\n".join(texto_encontrado)
 
         if not texto_completo:
