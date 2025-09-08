@@ -1,56 +1,83 @@
 import base64
 import boto3
-import email
 import os
 import uuid
+import json
+from io import BytesIO
+from multipart import MultipartParser
+
+from gemini_processor import analisar_com_gemini
+from textract_processor import extract_text
 
 s3 = boto3.client('s3')
-BUCKET_NAME = os.environ.get('BUCKET_NAME') # Pega o nome do bucket das variáveis de ambiente
+BUCKET_NAME = os.environ.get('BUCKET_NAME')
+
 
 def lambda_handler(event, context):
     try:
-        # Pega os headers do evento
-        headers = event.get('params', {}).get('header', {})
-        # Procura pelo content-type de forma case-insensitive
-        content_type = next((headers[key] for key in headers if key.lower() == 'content-type'), None)
+        body_bytes = base64.b64decode(event['body'])
+        headers = {k.lower(): v for k, v in event.get('headers', {}).items()}
+        content_type = headers.get('content-type')
 
-        if not content_type:
-            raise ValueError("Header 'Content-Type' não encontrado na requisição.")
+        if not content_type or 'multipart/form-data' not in content_type:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Content-Type deve ser multipart/form-data"})
+            }
 
-        body_decodificado = base64.b64decode(event['body-json']) # O corpo vem em 'body-json'
+        parser = MultipartParser(BytesIO(body_bytes), content_type)
+        respostas = []
+        erros = []
 
-        # Cria uma mensagem a partir dos bytes para facilitar o parse do multipart
-        msg = email.message_from_bytes(b'Content-Type: ' + content_type.encode() + b'\r\n' + body_decodificado)
+        for part in parser.parts():
+            filename = part.filename
+            if filename:
+                try:
+                    file_content = part.raw
+                    upload_key = f"recebidos/{uuid.uuid4()}-{filename}"
 
-        for part in msg.get_payload(): # Itera sobre as partes do formulário
-            if part.get_filename(): # Verifica se a parte é um arquivo
-                filename = f"{uuid.uuid4()}-{part.get_filename()}" # Cria um nome de arquivo único
-                file_content = part.get_payload(decode=True) # Pega o conteúdo do arquivo
+                    s3.put_object(Bucket=BUCKET_NAME, Key=upload_key, Body=file_content)
+                    print(f"✅ Arquivo salvo em s3://{BUCKET_NAME}/{upload_key}")
 
-                upload_key = f'recebidos/{filename}' # Define o caminho de upload no S3
+                    texto_extraido = extract_text(BUCKET_NAME, upload_key)
 
-                s3.put_object( # Envia o objeto para o S3
-                    Bucket=BUCKET_NAME,
-                    Key=upload_key,
-                    Body=file_content
-                )
+    
+                    texto_refinado = analisar_com_gemini(texto_extraido)
+                    if not texto_refinado:
+                        raise ValueError("Gemini não retornou texto válido")
 
-                print(f'✅ Arquivo salvo com sucesso em s3://{BUCKET_NAME}/{upload_key}')
+                    forma_pgto = (texto_refinado.get("forma_pgto") or "").lower()
+                    novo_caminho = f"dinheiro/{filename}" if forma_pgto in ["dinheiro", "pix"] else f"outros/{filename}"
 
+                    s3.copy_object(
+                        Bucket=BUCKET_NAME,
+                        CopySource={'Bucket': BUCKET_NAME, 'Key': upload_key},
+                        Key=novo_caminho
+                    )
+                    s3.delete_object(Bucket=BUCKET_NAME, Key=upload_key)
+                    texto_refinado["s3_location"] = f"s3://{BUCKET_NAME}/{novo_caminho}"
 
-               ##TO DO
-               ##chamar textract_processor
-               # texto_completo = textract_processor.nome_da_funcao(upload_key) **upload key armazena o caminho do arquivo no bucket
+                    respostas.append({
+                        "arquivo": filename,
+                        "nota_fiscal": texto_refinado
+                    })
 
-               ##fazer a extração dos dados e devolver em json
-               # funcao_de_extrair_dados_com_o_llm(texto_completo)
+                except Exception as e:
+                    print(f"⚠️ Erro processando {filename}: {e}")
+                    erros.append({"arquivo": filename, "erro": str(e)})
 
-               ##retornar a requisicao em json
-               #return {}
+        if not respostas:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Nenhum arquivo processado", "detalhes": erros})
+            }
 
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"status": "sucesso", "respostas": respostas, "erros": erros}, ensure_ascii=False)
+        }
 
-        return {'message': '❌ Nenhum arquivo encontrado na requisição.'}
     except Exception as e:
-        print(f'Erro: {e}')
-        # erro do API Gateway
-        raise Exception(f'❌ Erro no servidor: {e}')
+        print(f"❌ Erro geral: {e}")
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
