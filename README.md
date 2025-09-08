@@ -1,57 +1,46 @@
+
 # 📄 API REST de Processamento de Notas Fiscais
 
-![Python](https://img.shields.io/badge/Python-3.13-blue) ![AWS Lambda](https://img.shields.io/badge/AWS%20Lambda-serverless-orange) ![AWS S3](https://img.shields.io/badge/AWS%20S3-storage-yellow) ![Textract](https://img.shields.io/badge/AWS%20Textract-OCR-red)
+![Python](https://img.shields.io/badge/Python-3.13-blue) ![AWS Lambda](https://img.shields.io/badge/AWS%20Lambda-serverless-orange) ![AWS S3](https://img.shields.io/badge/AWS%20S3-storage-yellow) ![Textract](https://img.shields.io/badge/AWS%20Textract-OCR-red) ![Gemini](https://img.shields.io/badge/Gemini-LLM-purple)
 
 ---
 
 ## Sumário
 
 1. [Descrição](#descrição)
-2. [Funcionalidades](#funcionalidades)
-3. [Tecnologias](#tecnologias)
-4. [Estrutura do Projeto](#estrutura-do-projeto)
-5. [Instalação e Deploy](#instalação-e-deploy)
-6. [Endpoint](#endpoint)
-7. [Exemplo de Uso](#exemplo-de-uso)
+2. [Tecnologias](#tecnologias)
+3. [Estrutura do Projeto](#estrutura-do-projeto)
+4. [Instalação e Deploy](#instalação-e-deploy)
+5. [Endpoint](#endpoint)
+6. [Exemplo de Uso](#exemplo-de-uso)
+7. [Como Utilizar a Aplicação](#como-utilizar-a-aplicação)
 8. [Logs](#logs)
-9. [Considerações](#considerações)
-10. [Dificuldades e Aprendizados](#dificuldades-e-aprendizados)
+9. [Dificuldades e Aprendizados](#dificuldades-e-aprendizados)
 
 ---
 
 ## Descrição
 
-API REST em Python que recebe **imagens ou PDFs de notas fiscais eletrônicas simplificadas**, armazena no **S3**, extrai texto com **Amazon Textract** e refina os dados utilizando **LLM (Gemini)** para gerar JSON estruturado.
+API REST em Python que recebe **imagens de notas fiscais eletrônicas simplificadas** (ex: JPG, PNG), armazena no **Amazon S3**, extrai texto com **Amazon Textract** e refina os dados utilizando **LLM (Gemini)** para gerar um JSON estruturado.
 
 Arquivos são automaticamente movidos dentro do bucket S3 conforme **forma de pagamento**:
 
-* `dinheiro/` → notas pagas em dinheiro ou PIX
+* `dinheiro/` → notas pagas em **dinheiro ou PIX**
 * `outros/` → notas com outras formas de pagamento
 
 Todos os logs de processamento são gravados no **CloudWatch**.
 
 ---
 
-## Funcionalidades
-
-* Recebe arquivos via POST (`multipart/form-data`)
-* Armazena notas no S3
-* Extrai texto usando **Amazon Textract**
-* Refinamento e extração de dados com **LLM Gemini**
-* Classificação de arquivos no bucket (`dinheiro/` ou `outros/`)
-* Retorno JSON com os dados estruturados da nota fiscal
-* Registro de logs detalhados no **CloudWatch**
-
----
-
 ## Tecnologias
 
-* Python 3.13 
-* AWS Lambda 
-* AWS S3 
-* Amazon Textract 
-* Gemini LLM 
-* CloudWatch 
+* Python **3.13**
+* AWS Lambda
+* Amazon S3
+* Amazon Textract
+* Gemini LLM
+* API Gateway
+* CloudWatch
 
 ---
 
@@ -61,7 +50,7 @@ Todos os logs de processamento são gravados no **CloudWatch**.
 projeto-sprint-4-5-6/
 │
 ├─ src/
-│   ├─ lambda_function.py       # Função Lambda principal
+│   ├─ lambda_function.py       # Função Lambda principal (upload + fluxo completo)
 │   ├─ textract_processor.py    # Extração de texto via Textract
 │   └─ gemini_processor.py      # Refinamento de dados via LLM
 │
@@ -73,34 +62,36 @@ projeto-sprint-4-5-6/
 
 ## Instalação e Deploy
 
-1. Criar bucket S3 e configurar variável de ambiente:
+### 1. Criar bucket no S3
+
+```bash
+aws s3 mb s3://<nome-do-bucket>
+```
+
+---
+
+### 2. Configurar variáveis de ambiente na Lambda
 
 ```bash
 BUCKET_NAME=<nome_do_bucket>
+GEMINI_API_KEY=<sua_chave_gemini>
 ```
 
-2. Configurar chave da LLM Gemini:
+---
+
+### 3. Empacotar dependências
 
 ```bash
-GEMINI_API_KEY=<sua_chave_api>
+zip -r lambda-deploy.zip src/*
 ```
 
-3. Instalar dependências para empacotar:
+---
 
-```bash
-pip install multipart boto3 -t ./package
-```
+### 4. Criar API Gateway
 
-4. Empacotar os arquivos e fazer deploy na Lambda:
-
-```bash
-cd package
-zip -r ../lambda-deploy.zip .
-cd ..
-zip -g lambda-deploy.zip src/*
-```
-
-5. Criar API Gateway com método POST apontando para `/api/v1/invoice`.
+* Método: **POST**
+* Caminho: `/api/v1/invoice`
+* Integração: **Lambda**
 
 ---
 
@@ -122,28 +113,44 @@ Content-Type: multipart/form-data
 
 **Body**:
 
-* Campo: `file` → arquivo PDF ou imagem da nota fiscal.
+* Campo: `file` → imagem da nota fiscal (**JPG, PNG**).
 
 ---
 
 ## Exemplo de Uso
 
-**Usando curl**:
+### Via curl
 
 ```bash
 curl -X POST https://1egnwizx5d.execute-api.us-east-1.amazonaws.com/squad6/api/v1/invoice \
-  -F "file=@nota.pdf"
+  -F "file=@nota.png"
 ```
 
-**Resposta JSON**:
+---
+
+### Via Postman / Insomnia
+
+1. Selecione método **POST**
+2. Cole a URL do endpoint
+3. Vá em **Body → form-data**
+4. Adicione o campo:
+
+   * Key: `file`
+   * Type: File
+   * Value: selecione a nota (`.jpg` ou `.png`)
+5. Envie a requisição
+
+---
+
+### Resposta JSON
 
 ```json
 {
   "status": "sucesso",
   "respostas": [
     {
-      "arquivo": "nota.pdf",
-      "texto_refinado": {
+      "arquivo": "nota.png",
+      "nota_fiscal": {
         "nome_emissor": "Empresa XYZ Ltda",
         "CNPJ_emissor": "12.345.678/0001-90",
         "endereco_emissor": "Rua Exemplo, 123",
@@ -153,7 +160,7 @@ curl -X POST https://1egnwizx5d.execute-api.us-east-1.amazonaws.com/squad6/api/v
         "serie_nota_fiscal": "1",
         "valor_total": "123.45",
         "forma_pgto": "pix",
-        "s3_location": "s3://bucket/dinheiro/nota.pdf"
+        "s3_location": "s3://bucket/dinheiro/nota.png"
       }
     }
   ],
@@ -163,24 +170,42 @@ curl -X POST https://1egnwizx5d.execute-api.us-east-1.amazonaws.com/squad6/api/v
 
 ---
 
-## Logs
+## Como Utilizar a Aplicação
 
-* Todos os logs de processamento são gravados automaticamente no **CloudWatch**.
-* Incluem sucesso, erros e caminho do arquivo no S3.
+1. Prepare uma nota fiscal em **imagem (JPG ou PNG)**
+2. Envie para o endpoint via `curl`, Postman ou Insomnia
+3. O sistema:
+
+   * Recebe e valida o upload
+   * Armazena no **S3** em `recebidos/`
+   * Extrai texto com **Textract**
+   * Refina os dados com o **Gemini**
+   * Move a imagem para `dinheiro/` ou `outros/`
+   * Retorna JSON estruturado com todos os campos
+
+> 🔎 Caso o upload falhe, a API retorna os erros com logs no **CloudWatch**.
 
 ---
 
-## Considerações
+## Logs
 
-* Suporta **múltiplos arquivos** por requisição.
-* Arquivos são armazenados com **UUID** para evitar conflitos de nome.
-* A lógica de LLM pode ser refinada para diferentes formatos de nota fiscal.
-* Estrutura modular para fácil manutenção e expansão.
+* Disponíveis no **AWS CloudWatch**
+* Incluem:
+
+  * Sucesso no upload
+  * Caminho final do arquivo no S3
+  * Erros de processamento (Textract, Gemini, etc.)
 
 ---
 
 ## Dificuldades e Aprendizados
 
-*Durante o desenvolvimento deste projeto, nos deparamos com alguns desafios interessantes que acabaram se tornando grandes oportunidades de aprendizado. Trabalhar com uploads `multipart/form-data` no AWS Lambda exigiu algumas adaptações para que os arquivos enviados fossem recebidos e processados corretamente. Extrair dados precisos com o Amazon Textract também trouxe suas dificuldades, já que cada nota fiscal podia ter um layout diferente, o que exigiu ajustes finos na análise dos documentos. Além disso, o refinamento dos dados usando a LLM Gemini demandou compreensão sobre como o modelo interpreta e estrutura as informações, e ajustes foram necessários para garantir resultados consistentes. A organização dos arquivos no S3, com diretórios dinâmicos e identificadores únicos, foi outro ponto importante para evitar conflitos e manter a integridade dos dados. Por fim, integrar o API Gateway para lidar com requisições multipart e encaminhá-las corretamente para a Lambda foi essencial para que a API funcionasse de forma confiável. Apesar de todos esses desafios, cada um deles nos trouxe aprendizados valiosos e fortaleceu nossas habilidades em soluções serverless na AWS.*
+Durante o desenvolvimento:
+
+* Upload `multipart/form-data` no AWS Lambda exigiu parsing manual com a lib nativa `email`.
+* O Amazon Textract retorna dados diferentes dependendo do layout da nota → ajustes foram necessários.
+* O Gemini foi essencial para **estruturar campos inconsistentes** e gerar JSON confiável.
+* Organização no S3 usando **pastas dinâmicas** e **UUIDs** trouxe robustez.
+* Configuração correta do API Gateway foi fundamental para lidar com uploads binários.
 
 ---
