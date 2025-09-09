@@ -145,12 +145,8 @@ curl -X POST https://1egnwizx5d.execute-api.us-east-1.amazonaws.com/squad6/api/v
 ### Resposta JSON
 
 ```json
-{
-  "status": "sucesso",
-  "respostas": [
-    {
-      "arquivo": "nota.png",
-      "nota_fiscal": {
+    
+ {
         "nome_emissor": "Empresa XYZ Ltda",
         "CNPJ_emissor": "12.345.678/0001-90",
         "endereco_emissor": "Rua Exemplo, 123",
@@ -159,13 +155,9 @@ curl -X POST https://1egnwizx5d.execute-api.us-east-1.amazonaws.com/squad6/api/v
         "numero_nota_fiscal": "1234",
         "serie_nota_fiscal": "1",
         "valor_total": "123.45",
-        "forma_pgto": "pix",
-        "s3_location": "s3://bucket/dinheiro/nota.png"
-      }
-    }
-  ],
-  "erros": []
+         "forma_pgto": "pix"
 }
+
 ```
 
 ---
