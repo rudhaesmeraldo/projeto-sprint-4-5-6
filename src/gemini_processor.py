@@ -1,12 +1,28 @@
 import json
 import os
 import urllib.request
+import unicodedata
 
 # Obtém a chave da API das variáveis de ambiente
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
+
+def remover_acentos(texto: str) -> str:
+    """
+    Remove acentos e caracteres especiais de uma string.
+    Exemplo: "informação" -> "informacao"
+    """
+    # Normaliza a string para decompor caracteres acentuados
+    # Ex: 'ç' -> 'c' e 'á' -> 'a'
+    texto_limpo = unicodedata.normalize('NFD', texto)
+    # Codifica para ASCII e decodifica para remover os caracteres
+    texto_limpo = texto_limpo.encode('ascii', 'ignore').decode('utf-8')
+    print("executei a remoção de acentos")
+    return texto_limpo
+
 def analisar_com_gemini(texto_extraido: str) -> dict: # chama a API do Gemini
     print('❗Iniciando extração de dados com a API do Gemini...')
+    texto_extraido_limpo = remover_acentos(texto_extraido)
 
     # url da API
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}'
@@ -60,29 +76,48 @@ def analisar_com_gemini(texto_extraido: str) -> dict: # chama a API do Gemini
 
     -> TEXTO PARA ANÁLISE
     ---
-    {texto_extraido}
+    {texto_extraido_limpo}
     ---
     """
-
+    print("CHEGUEI PROXIMO ANTES DA PRIMEIRA REQUISICAO")
     # requisição para a API
     data = {"contents": [{"parts": [{"text": prompt}]}]}
     
     json_data = json.dumps(data).encode('utf-8')
     req = urllib.request.Request(url, data=json_data, headers={'Content-Type': 'application/json'})
+
+    print("PASSEI DA PRIMEIRA REQUISICAO")
     
     try:
-        with urllib.request.urlopen(req) as response:
+        print("ENTREI NO SEGUNDO TRY DO GEMINI")
+        with urllib.request.urlopen(req, timeout=10) as response:
+            print("PRIMEIRA LINHA")
             response_body = json.loads(response.read())
+            print("SEGUNDA LINHA")
             json_response_text = response_body['candidates'][0]['content']['parts'][0]['text']
+            print("TERCEIRA LINHA")
             
             print("--- Resposta da LLM ---")
             print(json_response_text)
+          
 
+           
+            print("--- APOS Resposta da LLM ---")
             # faz com que JSON seja válido, substituindo o 'None' por 'null'
             json_response_text = json_response_text.replace('None', 'null')
-            
-            # Converte a string de resposta em um dicionário
-            return json.loads(json_response_text)
+
+
+            print("--- APOS VALIDACAO da LLM ---")
+            print(json_response_text)
+            headers = {
+            'Content-Type': 'application/json'
+            }
+    
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json_response_text
+            }
             
     except Exception as e:
         print(f"❌ Erro ao chamar a API do Gemini: {e}")
