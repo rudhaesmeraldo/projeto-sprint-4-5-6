@@ -48,14 +48,12 @@ Todos os logs de processamento são gravados no **CloudWatch**.
 
 ```
 projeto-sprint-4-5-6/
+├─ lambda_function.py       # Função Lambda principal (upload + fluxo completo)
+├─ textract_processor.py    # Extração de texto via Textract
+├─ gemini_processor.py      # Refinamento de dados via LLM
 │
-├─ src/
-│   ├─ lambda_function.py       # Função Lambda principal (upload + fluxo completo)
-│   ├─ textract_processor.py    # Extração de texto via Textract
-│   └─ gemini_processor.py      # Refinamento de dados via LLM
-│
-├─ README.md
-└─ requirements.txt
+├─ README.md               
+└─ requirements.txt         
 ```
 
 ---
