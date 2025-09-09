@@ -9,7 +9,7 @@ from gemini_processor import analisar_com_gemini
 s3 = boto3.client("s3")
 textract = boto3.client("textract")
 
-BUCKET_NAME = os.environ.get("BUCKET_NAME", "projeto-nfe-squad-6")
+BUCKET_NAME = os.environ.get("BUCKET_NAME")
 
 def lambda_handler(event, context):
     try:
