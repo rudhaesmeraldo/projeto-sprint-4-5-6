@@ -122,8 +122,7 @@ Content-Type: multipart/form-data
 ### Via curl
 
 ```bash
-curl -X POST https://1egnwizx5d.execute-api.us-east-1.amazonaws.com/squad6/api/v1/invoice \
-  -F "file=@nota.png"
+curl.exe --location --request POST "https://1egnwi2x5d.execute-api.us-east-1.amazonaws.com/squad6/api/v1/invoice" --form "file=@/seu/caminho/do/arquivo.jpg" | ConvertFrom-Json | ConvertTo-Json -Depth 10
 ```
 
 ---
