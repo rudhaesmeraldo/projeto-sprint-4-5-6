@@ -1,82 +1,78 @@
-import base64
-import boto3
-import email
-import os
-import uuid
 import json
-
-from textract_processor import extract_text
+import boto3
+import os
+import base64
+import uuid
+from urllib.parse import parse_qs
 from gemini_processor import analisar_com_gemini
 
-s3 = boto3.client('s3')
-BUCKET_NAME = os.environ.get('BUCKET_NAME') 
+s3 = boto3.client("s3")
+textract = boto3.client("textract")
+
+BUCKET_NAME = os.environ.get("BUCKET_NAME", "projeto-nfe-squad-6")
 
 def lambda_handler(event, context):
     try:
-        headers = event.get('params', {}).get('header', {})
-        content_type = next((headers[key] for key in headers if key.lower() == 'content-type'), None)
+        print(f"{context.aws_request_id} Iniciando processamento da nota fiscal...")
 
-        if not content_type:
-            raise ValueError("Header 'Content-Type' não encontrado na requisição.")
+        is_base64 = event.get("isBase64Encoded", False)
+        body = event.get("body", "")
+        if is_base64:
+            print(f"{context.aws_request_id} Requisição base64 detectada.")
+            body = base64.b64decode(body)
 
-        body_decodificado = base64.b64decode(event['body-json'])
-        msg = email.message_from_bytes(b'Content-Type: ' + content_type.encode() + b'\r\n' + body_decodificado)
+        headers = {k.lower(): v for k, v in event.get("headers", {}).items()}
+        content_type = headers.get("content-type", "")
 
-        respostas = []
+        if "multipart/form-data" in content_type:
+            print(f"{context.aws_request_id} Detectado multipart/form-data, extraindo arquivo...")
+            boundary = content_type.split("boundary=")[1]
+            parts = body.split(b"--" + boundary.encode())
+            file_content = None
+            filename = str(uuid.uuid4()) + ".jpg"
 
-        for part in msg.get_payload(): 
-            if part.get_filename(): 
-                filename = f"{uuid.uuid4()}-{part.get_filename()}"  
-                file_content = part.get_payload(decode=True)
+            for part in parts:
+                if b"Content-Disposition" in part and b"filename=" in part:
+                    file_content = part.split(b"\r\n\r\n", 1)[1].rsplit(b"\r\n", 1)[0]
 
-                upload_key = f'recebidos/{filename}'
+            if not file_content:
+                raise ValueError("Nenhum arquivo encontrado no corpo da requisição")
 
-                s3.put_object(
-                    Bucket=BUCKET_NAME,
-                    Key=upload_key,
-                    Body=file_content
-                )
-                print(f'✅ Arquivo salvo com sucesso em s3://{BUCKET_NAME}/{upload_key}')
+            s3_key = f"recebidos/{filename}"
+            s3.put_object(Bucket=BUCKET_NAME, Key=s3_key, Body=file_content)
+            print(f"{context.aws_request_id} 📄 Arquivo salvo em s3://{BUCKET_NAME}/{s3_key}")
+        else:
+            raise ValueError("Formato não suportado. Envie multipart/form-data.")
 
-                texto_extraido = extract_text(BUCKET_NAME, upload_key)
+        print(f"{context.aws_request_id} Rodando Textract no arquivo: s3://{BUCKET_NAME}/{s3_key}")
+        response = textract.detect_document_text(
+            Document={"S3Object": {"Bucket": BUCKET_NAME, "Name": s3_key}}
+        )
 
-                nota_fiscal = analisar_com_gemini(texto_extraido)
-                if not nota_fiscal:
-                    raise ValueError("Gemini não retornou dados válidos da nota.")
+        extracted_text = "\n".join(
+            [b["Text"] for b in response["Blocks"] if b["BlockType"] == "LINE"]
+        )
 
-                forma_pgto = (nota_fiscal.get("forma_pgto") or "").lower()
-                pasta_final = "dinheiro" if forma_pgto in ["dinheiro", "pix"] else "outros"
-                novo_caminho = f"{pasta_final}/{filename}"
+        if not extracted_text.strip():
+            raise ValueError("Textract não retornou texto.")
 
-                s3.copy_object(
-                    Bucket=BUCKET_NAME,
-                    CopySource={"Bucket": BUCKET_NAME, "Key": upload_key},
-                    Key=novo_caminho
-                )
-                s3.delete_object(Bucket=BUCKET_NAME, Key=upload_key)
-
-                nota_fiscal['s3_location'] = f's3://{BUCKET_NAME}/{novo_caminho}'
-
-                respostas.append({
-                    "arquivo": part.get_filename(),
-                    "nota_fiscal": nota_fiscal
-                })
-
-        if not respostas:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Nenhum arquivo encontrado na requisição"})
-            }
+        dados_estruturados = analisar_com_gemini(extracted_text)
 
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"status": "sucesso", "respostas": respostas}, ensure_ascii=False)
+            "body": json.dumps(
+                {
+                    "mensagem": "Processamento concluído com sucesso",
+                    "arquivo": s3_key,
+                    "dados": dados_estruturados,
+                },
+                ensure_ascii=False,
+            ),
         }
 
     except Exception as e:
-        print(f'❌ Erro: {e}')
+        print(f"❌ Erro: {str(e)}")
         return {
             "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
+            "body": json.dumps({"erro": str(e)}, ensure_ascii=False),
         }
